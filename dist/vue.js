@@ -39,11 +39,56 @@
     return Constructor;
   }
 
+  // 重写数组中的部分方法
+  var oldArrayProto = Array.prototype;
+  var newArrayProto = Object.create(oldArrayProto); // 数组中所有的变异方法
+
+  var methods = ["push", "pop", "shift", "unshift", "reverse", "sort", "splice"]; // 面向切片编程
+
+  methods.forEach(function (method) {
+    newArrayProto[method] = function () {
+      var _oldArrayProto$method;
+
+      var inserted;
+      var ob = this.__ob__;
+
+      for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+        args[_key] = arguments[_key];
+      }
+
+      switch (method) {
+        case "push":
+        case "unshift":
+          inserted = args;
+          break;
+
+        case "splice":
+          inserted = args.slice(2);
+      }
+
+      if (inserted) ob.observeArray(inserted);
+      return (_oldArrayProto$method = oldArrayProto[method]).call.apply(_oldArrayProto$method, [this].concat(args));
+    };
+  });
+
   var Observer = /*#__PURE__*/function () {
     function Observer(data) {
       _classCallCheck(this, Observer);
 
-      this.walk(data);
+      Object.defineProperty(data, "__ob__", {
+        value: this,
+        // 将__ob__变价不可枚举的属性，否则会死循环
+        enumerable: false
+      }); // 两个效果，一是在数组的重写方法内可以调用observeArray，二是给数据加了标识，有这个属性则说明被观测过，不需要再被观测了
+      // data.__ob__ = this;
+
+      if (Array.isArray(data)) {
+        data.__proto__ = newArrayProto; // 如果数组中放的是对象，可以监控到对象的变化
+
+        this.observeArray(data);
+      } else {
+        this.walk(data);
+      }
     }
 
     _createClass(Observer, [{
@@ -51,6 +96,13 @@
       value: function walk(data) {
         Object.keys(data).forEach(function (key) {
           return defineReactive(data, key, data[key]);
+        });
+      }
+    }, {
+      key: "observeArray",
+      value: function observeArray(data) {
+        data.forEach(function (item) {
+          return observe(item);
         });
       }
     }]);
@@ -66,6 +118,7 @@
       },
       set: function set(newVal) {
         if (value === newVal) return;
+        observe(newVal);
         value = newVal;
       }
     });
@@ -75,11 +128,14 @@
     if (_typeof(data) !== "object" || data === null) return; // 如果一个对象被劫持过了，就不需要再被劫持了
     // 判断一个对象是否被劫持过，添加增添一个实例，用实例来判断是否被劫持过
 
+    if (data.__ob__ instanceof Observer) {
+      return data.__ob__;
+    }
+
     return new Observer(data);
   }
 
   /**
-   *
    * @description 初始化data,props,computed等状态
    */
 

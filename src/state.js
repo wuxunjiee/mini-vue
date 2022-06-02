@@ -1,7 +1,6 @@
 import { observe } from "./observe";
 
 /**
- *
  * @description 初始化data,props,computed等状态
  */
 export function initState(vm) {
